@@ -1,31 +1,30 @@
 import {
   Column,
   Entity,
-  JoinColumn,
-  ManyToOne,
   Index,
 } from 'typeorm';
 
 import { BaseEntity } from 'src/common/entities/base.entity';
 
-import { TipoTransporte } from './tipo-transporte.entity';
+import { VehiculoTipo } from '../enums/vehiculo-tipo.enum';
 
 @Entity({
   name: 'vehiculo',
 })
 
-@Index('IDX_VEHICULO_PLACAS', ['placas'])
+@Index('IDX_VEHICULO_PLACA', ['placa'])
 
 export class Vehiculo extends BaseEntity {
 
-  @ManyToOne(
-    () => TipoTransporte,
-    { nullable: false },
-  )
-  @JoinColumn({
-    name: 'tipo_transporte_id',
+  @Column({
+    type: 'int',
   })
-  tipoTransporte: TipoTransporte;
+  tipo: VehiculoTipo;
+
+  @Column({
+    length: 100,
+  })
+  nombre: string;
 
   @Column({
     length: 100,
@@ -38,16 +37,15 @@ export class Vehiculo extends BaseEntity {
   modelo: string;
 
   @Column({
+    length: 50,
+  })
+  color: string;
+
+  @Column({
     length: 20,
     unique: true,
   })
-  placas: string;
-
-  @Column({
-    nullable: true,
-    length: 50,
-  })
-  serie?: string;
+  placa: string;
 
   @Column({
     default: true,

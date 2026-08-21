@@ -12,7 +12,7 @@ import { BaseEntity } from 'src/common/entities/base.entity';
 
 export class Banco extends BaseEntity {
 
-  @Column({length: 150})
+  @Column({length: 150}) 
   @Index('UQ_BANCO_NOMBRE', { unique: true })
   nombre: string;
 
