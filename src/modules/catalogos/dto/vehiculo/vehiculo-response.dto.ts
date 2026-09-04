@@ -1,15 +1,18 @@
 import { VehiculoTipo } from '../../enums/vehiculo-tipo.enum';
+import { VehiculoClase } from '../../enums/vehiculo-clase.enum';
 
 export class VehiculoResponseDto {
   id: string;
 
   tipo: VehiculoTipo;
 
-  nombre: string;
+  clase: VehiculoClase;
+
+  submarca: string;
 
   marca: string;
 
-  modelo: string;
+  modelo: number;
 
   color: string;
 

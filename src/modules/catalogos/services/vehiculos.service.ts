@@ -22,25 +22,26 @@ export class VehiculosService {
     private readonly vehiculoRepository: Repository<Vehiculo>,
   ) {}
 
-  // Obtiene vehículos con paginación, filtros y ordenamiento.
   async findAll(query: FindVehiculosQueryDto) {
     const {
       page = 1,
       limit = 25,
-      nombre,
+      submarca,
       marca,
       placa,
       tipo,
+      clase,
+      modelo,
       status,
-      sortBy = 'nombre',
+      sortBy = 'submarca',
       sortOrder = 'ASC',
     } = query;
 
     const qb = this.vehiculoRepository.createQueryBuilder('vehiculo');
 
-    if (nombre) {
-      qb.andWhere('LOWER(vehiculo.nombre) LIKE LOWER(:nombre)', {
-        nombre: `%${nombre.trim()}%`,
+    if (submarca) {
+      qb.andWhere('LOWER(vehiculo.submarca) LIKE LOWER(:submarca)', {
+        submarca: `%${submarca.trim()}%`,
       });
     }
 
@@ -58,6 +59,14 @@ export class VehiculosService {
 
     if (tipo !== undefined) {
       qb.andWhere('vehiculo.tipo = :tipo', { tipo });
+    }
+
+    if (clase !== undefined) {
+      qb.andWhere('vehiculo.clase = :clase', { clase });
+    }
+
+    if (modelo !== undefined) {
+      qb.andWhere('vehiculo.modelo = :modelo', { modelo });
     }
 
     if (status !== undefined) {
@@ -83,13 +92,11 @@ export class VehiculosService {
     };
   }
 
-  // Busca un vehículo por ID.
   async findOne(id: string): Promise<VehiculoResponseDto> {
     const vehiculo = await this.findVehiculoOrFail(id);
     return this.toResponseDto(vehiculo);
   }
 
-  // Crea un vehículo nuevo.
   async create(
     createVehiculoDto: CreateVehiculoDto,
     userId: string,
@@ -104,7 +111,6 @@ export class VehiculosService {
     return this.toResponseDto(savedVehiculo);
   }
 
-  // Actualiza parcialmente un vehículo.
   async update(
     id: string,
     updateVehiculoDto: UpdateVehiculoDto,
@@ -143,7 +149,8 @@ export class VehiculosService {
     return {
       id: vehiculo.id,
       tipo: vehiculo.tipo,
-      nombre: vehiculo.nombre,
+      clase: vehiculo.clase,
+      submarca: vehiculo.submarca,
       marca: vehiculo.marca,
       modelo: vehiculo.modelo,
       color: vehiculo.color,

@@ -7,6 +7,7 @@ import {
 import { BaseEntity } from 'src/common/entities/base.entity';
 
 import { VehiculoTipo } from '../enums/vehiculo-tipo.enum';
+import { VehiculoClase } from '../enums/vehiculo-clase.enum';
 
 @Entity({
   name: 'vehiculo',
@@ -22,9 +23,14 @@ export class Vehiculo extends BaseEntity {
   tipo: VehiculoTipo;
 
   @Column({
+    type: 'int',
+  })
+  clase: VehiculoClase;
+
+  @Column({
     length: 100,
   })
-  nombre: string;
+  submarca: string;
 
   @Column({
     length: 100,
@@ -32,9 +38,9 @@ export class Vehiculo extends BaseEntity {
   marca: string;
 
   @Column({
-    length: 100,
+    type: 'int',
   })
-  modelo: string;
+  modelo: number;
 
   @Column({
     length: 50,
