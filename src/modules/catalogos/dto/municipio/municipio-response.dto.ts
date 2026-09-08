@@ -15,6 +15,7 @@ export class MunicipioResponseDto {
     id: string;
     nombre: string;
     zona: string;
+    descripcion?: string;
   } | null;
 
   createdAt: Date;

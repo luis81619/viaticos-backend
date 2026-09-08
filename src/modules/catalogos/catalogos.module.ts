@@ -14,7 +14,6 @@ import { VehiculosController } from './controllers/vehiculos.controller';
 import { MunicipiosController } from './controllers/municipios.controller';
 import { EstadosController } from './controllers/estados.controller';
 import { ZonasController } from './controllers/zonas.controller';
-import { ZonificacionController } from './controllers/zonificacion.controller';
 import { NivelesAplicacionController } from './controllers/niveles-aplicacion.controller';
 import { TabuladorController } from './controllers/tabulador.controller';
 
@@ -23,7 +22,6 @@ import { VehiculosService } from './services/vehiculos.service';
 import { MunicipiosService } from './services/municipios.service';
 import { EstadosService } from './services/estados.service';
 import { ZonasService } from './services/zonas.service';
-import { ZonificacionService } from './services/zonificacion.service';
 import { NivelesAplicacionService } from './services/niveles-aplicacion.service';
 import { TabuladorService } from './services/tabulador.service';
 
@@ -63,7 +61,6 @@ import { ActividadesController } from './controllers/actividades.controller';
     MunicipiosController,
     EstadosController,
     ZonasController,
-    ZonificacionController,
     NivelesAplicacionController,
     TabuladorController,
   ],
@@ -75,7 +72,6 @@ import { ActividadesController } from './controllers/actividades.controller';
     MunicipiosService,
     EstadosService,
     ZonasService,
-    ZonificacionService,
     NivelesAplicacionService,
     TabuladorService,
   ],

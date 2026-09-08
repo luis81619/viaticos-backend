@@ -15,6 +15,7 @@ import { MunicipiosService } from '../services/municipios.service';
 import { CreateMunicipioDto } from '../dto/municipio/create-municipio.dto';
 import { UpdateMunicipioDto } from '../dto/municipio/update-municipio.dto';
 import { FindMunicipiosQueryDto } from '../dto/municipio/find-municipios-query.dto';
+import { BatchUpdateMunicipiosDto } from '../dto/municipio/batch-update-municipios.dto';
 
 import { ResponseMessage } from '../../../common/decorators/response-message.decorator';
 
@@ -66,6 +67,16 @@ export class MunicipiosController {
       createMunicipioDto,
       user.id,
     );
+  }
+
+  @Patch('batch')
+  @Roles(ViaticosRole.ADMIN)
+  @ResponseMessage('Municipios actualizados masivamente.')
+  batchUpdate(
+    @Body() dto: BatchUpdateMunicipiosDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.municipiosService.batchUpdate(dto, user.id);
   }
 
   @Patch(':id')

@@ -15,6 +15,8 @@ import { CreateMunicipioDto } from '../dto/municipio/create-municipio.dto';
 import { UpdateMunicipioDto } from '../dto/municipio/update-municipio.dto';
 import { FindMunicipiosQueryDto } from '../dto/municipio/find-municipios-query.dto';
 import { MunicipioResponseDto } from '../dto/municipio/municipio-response.dto';
+import { BatchUpdateMunicipiosDto } from '../dto/municipio/batch-update-municipios.dto';
+import { In } from 'typeorm';
 
 import { ErrorCode } from 'src/common/exceptions/error-codes';
 
@@ -128,8 +130,7 @@ export class MunicipiosService {
 
     const { estadoId, zonaId, ...rest } = updateMunicipioDto;
 
-    // Validación para el flujo "asignar por primera vez": rechaza si el municipio
-    // ya tiene zona (y por ende región) asignada.
+
     if (mode === 'assign' && municipio.zona) {
       throw new ConflictException({
         error: {
@@ -155,6 +156,77 @@ export class MunicipiosService {
     const updated = await this.municipioRepository.save(municipio);
 
     return this.toResponseDto(updated);
+  }
+
+  // Actualización masiva: aplica los mismos cambios a los municipios listados.
+  // - zonaId y region se aplican a cada municipio.
+  // - descripcionZona se aplica a la zona (afecta a todos los municipios que usen esa zona).
+  async batchUpdate(
+    dto: BatchUpdateMunicipiosDto,
+    userId: string,
+  ): Promise<{ actualizados: number }> {
+    const { ids, changes } = dto;
+
+    if (
+      changes.zonaId === undefined &&
+      changes.region === undefined &&
+      changes.descripcionZona === undefined
+    ) {
+      return { actualizados: 0 };
+    }
+
+    const municipios = await this.municipioRepository.find({
+      where: { id: In(ids) },
+      relations: { estado: true, zona: true },
+    });
+
+    if (municipios.length === 0) {
+      throw new NotFoundException({
+        error: {
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          message: 'No se encontraron municipios para actualizar.',
+          details: [],
+        },
+      });
+    }
+
+    let nuevaZona: Zona | null = null;
+    if (changes.zonaId !== undefined) {
+      nuevaZona = await this.findZonaOrFail(changes.zonaId);
+    }
+
+    for (const municipio of municipios) {
+      if (nuevaZona) {
+        municipio.zona = nuevaZona;
+      }
+      if (changes.region !== undefined) {
+        municipio.region = changes.region;
+      }
+      municipio.updatedBy = userId;
+    }
+
+    await this.municipioRepository.save(municipios);
+
+    // Descripción se aplica a las zonas únicas involucradas
+    if (changes.descripcionZona !== undefined) {
+      const zonasParaActualizar = new Map<string, Zona>();
+      for (const municipio of municipios) {
+        if (municipio.zona) {
+          zonasParaActualizar.set(municipio.zona.id, municipio.zona);
+        }
+      }
+
+      for (const zona of zonasParaActualizar.values()) {
+        zona.descripcion = changes.descripcionZona;
+        zona.updatedBy = userId;
+      }
+
+      if (zonasParaActualizar.size > 0) {
+        await this.zonaRepository.save(Array.from(zonasParaActualizar.values()));
+      }
+    }
+
+    return { actualizados: municipios.length };
   }
 
   private async findMunicipioOrFail(id: string): Promise<Municipio> {
@@ -225,6 +297,7 @@ export class MunicipiosService {
             id: municipio.zona.id,
             nombre: municipio.zona.nombre,
             zona: municipio.zona.zona,
+            descripcion: municipio.zona.descripcion,
           }
         : null,
       createdAt: municipio.createdAt,
