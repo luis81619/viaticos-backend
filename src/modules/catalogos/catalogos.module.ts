@@ -8,6 +8,7 @@ import { Municipio } from './entities/municipio.entity';
 import { Zona } from './entities/zona.entity';
 import { NivelAplicacion } from './entities/nivel-aplicacion.entity';
 import { TarifaViaticos } from './entities/tarifa-viaticos.entity';
+import { Trabajador } from './entities/trabajador.entity';
 
 import { BancosController } from './controllers/bancos.controller';
 import { VehiculosController } from './controllers/vehiculos.controller';
@@ -16,6 +17,7 @@ import { EstadosController } from './controllers/estados.controller';
 import { ZonasController } from './controllers/zonas.controller';
 import { NivelesAplicacionController } from './controllers/niveles-aplicacion.controller';
 import { TabuladorController } from './controllers/tabulador.controller';
+import { TrabajadoresController } from './controllers/trabajadores.controller';
 
 import { BancosService } from './services/bancos.service';
 import { VehiculosService } from './services/vehiculos.service';
@@ -24,6 +26,7 @@ import { EstadosService } from './services/estados.service';
 import { ZonasService } from './services/zonas.service';
 import { NivelesAplicacionService } from './services/niveles-aplicacion.service';
 import { TabuladorService } from './services/tabulador.service';
+import { TrabajadoresService } from './services/trabajadores.service';
 
 import { AuthModule } from '../auth/auth.module';
 import { Plantel } from './entities/plantel.entity';
@@ -50,6 +53,7 @@ import { ActividadesController } from './controllers/actividades.controller';
       Zona,
       NivelAplicacion,
       TarifaViaticos,
+      Trabajador,
     ]),
     AuthModule,
   ],
@@ -63,6 +67,7 @@ import { ActividadesController } from './controllers/actividades.controller';
     ZonasController,
     NivelesAplicacionController,
     TabuladorController,
+    TrabajadoresController,
   ],
   providers: [
     BancosService,
@@ -74,6 +79,7 @@ import { ActividadesController } from './controllers/actividades.controller';
     ZonasService,
     NivelesAplicacionService,
     TabuladorService,
+    TrabajadoresService,
   ],
 })
 export class CatalogosModule {}
