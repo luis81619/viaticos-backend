@@ -1,19 +1,9 @@
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
 
 import { BaseEntity } from 'src/common/entities/base.entity';
 
-import { Estado } from './estado.entity';
-
-@Entity({
-  name: 'zona',
-})
+@Entity({ name: 'zona' })
 export class Zona extends BaseEntity {
-
   @Column({
     length: 150,
   })
@@ -29,13 +19,4 @@ export class Zona extends BaseEntity {
     length: 500,
   })
   descripcion?: string;
-
-  @ManyToOne(
-    () => Estado,
-    { nullable: false },
-  )
-  @JoinColumn({
-    name: 'estado_id',
-  })
-  estado: Estado;
 }

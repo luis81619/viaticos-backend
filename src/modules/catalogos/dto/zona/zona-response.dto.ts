@@ -6,10 +6,4 @@ export class ZonaResponseDto {
   zona: string;
 
   descripcion?: string;
-
-  estado?: {
-    id: string;
-    nombre: string;
-    clave: number;
-  };
 }

@@ -27,7 +27,6 @@ export class TrabajadoresController {
   constructor(private readonly trabajadoresService: TrabajadoresService) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Trabajadores retrieved successfully.')
   findAll(@Query() query: FindTrabajadoresQueryDto) {
     return this.trabajadoresService.findAll(query);

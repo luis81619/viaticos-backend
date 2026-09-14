@@ -37,7 +37,6 @@ export class BancosController {
   ) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Banks retrieved successfully.')
   findAll(
     @Query() query: FindBancosQueryDto,
@@ -46,7 +45,6 @@ export class BancosController {
   }
 
   @Get(':id')
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Bank retrieved successfully.')
   findOne(
     @Param('id', new ParseUUIDPipe())

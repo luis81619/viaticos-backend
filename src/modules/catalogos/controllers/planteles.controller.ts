@@ -30,7 +30,6 @@ export class PlantelesController {
   ) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage(
     'Plantels retrieved successfully.',
   )

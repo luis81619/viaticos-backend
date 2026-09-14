@@ -30,7 +30,6 @@ export class TabuladorController {
   ) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Tabulador retrieved successfully.')
   listar() {
     return this.tabuladorService.listar();

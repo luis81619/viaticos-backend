@@ -37,9 +37,6 @@ export class ActividadesController {
   ) {}
 
     @Get()
-    @Roles(
-    ViaticosRole.ACCESO,
-    )
     @ResponseMessage(
     'Activities retrieved successfully.',
     )

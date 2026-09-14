@@ -37,7 +37,6 @@ export class VehiculosController {
   ) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Vehicles retrieved successfully.')
   findAll(
     @Query() query: FindVehiculosQueryDto,
@@ -46,7 +45,6 @@ export class VehiculosController {
   }
 
   @Get(':id')
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Vehicle retrieved successfully.')
   findOne(
     @Param('id', new ParseUUIDPipe())
@@ -85,5 +83,18 @@ export class VehiculosController {
       updateVehiculoDto,
       user.id,
     );
+  }
+
+  @Patch(':id/status')
+  @Roles(ViaticosRole.ADMIN)
+  @ResponseMessage('Vehicle status updated successfully.')
+  toggleStatus(
+    @Param('id', new ParseUUIDPipe())
+    
+    id: string,
+
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.vehiculosService.toggleStatus(id, user.id);
   }
 }

@@ -38,7 +38,6 @@ export class MunicipiosController {
   ) {}
 
   @Get()
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Municipios retrieved successfully.')
   findAll(
     @Query() query: FindMunicipiosQueryDto,
@@ -47,7 +46,6 @@ export class MunicipiosController {
   }
 
   @Get(':id')
-  @Roles(ViaticosRole.ACCESO)
   @ResponseMessage('Municipio retrieved successfully.')
   findOne(
     @Param('id', new ParseUUIDPipe())

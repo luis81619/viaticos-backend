@@ -1,20 +1,11 @@
-import {
-  Column,
-  Entity,
-  Index,
-} from 'typeorm';
+import { Column, Entity } from 'typeorm';
 
 import { BaseEntity } from 'src/common/entities/base.entity';
 
 import { VehiculoTipo } from '../enums/vehiculo-tipo.enum';
 import { VehiculoClase } from '../enums/vehiculo-clase.enum';
 
-@Entity({
-  name: 'vehiculo',
-})
-
-@Index('IDX_VEHICULO_PLACA', ['placa'])
-
+@Entity({ name: 'vehiculo' })
 export class Vehiculo extends BaseEntity {
 
   @Column({

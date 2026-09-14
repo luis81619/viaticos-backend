@@ -4,9 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Zona } from '../entities/zona.entity';
-import { Estado } from '../entities/estado.entity';
 import { ZonaResponseDto } from '../dto/zona/zona-response.dto';
-import { FindZonasQueryDto } from '../dto/zona/find-zonas-query.dto';
 
 const ZONAS_BASE = ['I', 'II', 'III', 'IV'];
 
@@ -15,45 +13,38 @@ export class ZonasService {
   constructor(
     @InjectRepository(Zona)
     private readonly zonaRepository: Repository<Zona>,
-
-    @InjectRepository(Estado)
-    private readonly estadoRepository: Repository<Estado>,
   ) {}
 
-  async findAll(query: FindZonasQueryDto = {}): Promise<ZonaResponseDto[]> {
-    // Si se filtra por estado, aseguramos que existan las 4 zonas base.
-    if (query.estadoId) {
-      await this.ensureZonasBaseParaEstado(query.estadoId);
-    }
+  // Devuelve las 4 zonas globales (I/II/III/IV). Si alguna no existe se crea al vuelo.
+  // Si en la BD hay duplicados por historial (una zona por estado), deduplica y
+  // devuelve solo una fila por cada nivel.
+  async findAll(): Promise<ZonaResponseDto[]> {
+    await this.ensureZonasBase();
 
-    const qb = this.zonaRepository
+    const zonas = await this.zonaRepository
       .createQueryBuilder('zona')
-      .leftJoinAndSelect('zona.estado', 'estado');
-
-    if (query.estadoId) {
-      qb.andWhere('estado.id = :estadoId', { estadoId: query.estadoId });
-    }
-
-    qb.orderBy('estado.nombre', 'ASC')
-      .addOrderBy('zona.zona', 'ASC')
-      .addOrderBy('zona.nombre', 'ASC');
-
-    const zonas = await qb.getMany();
-
-    return zonas.map((zona) => this.toResponseDto(zona));
-  }
-
-  // Crea las zonas I/II/III/IV que aún no existan para el estado dado.
-  private async ensureZonasBaseParaEstado(estadoId: string): Promise<void> {
-    const estado = await this.estadoRepository.findOne({ where: { id: estadoId } });
-    if (!estado) return;
-
-    const existentes = await this.zonaRepository
-      .createQueryBuilder('zona')
-      .leftJoin('zona.estado', 'estado')
-      .where('estado.id = :estadoId', { estadoId })
+      .orderBy('zona.zona', 'ASC')
+      .addOrderBy('zona.createdAt', 'ASC')
       .getMany();
 
+    // Dedup por nivel (I/II/III/IV): conservamos la primera de cada.
+    const porNivel = new Map<string, Zona>();
+    for (const z of zonas) {
+      if (!porNivel.has(z.zona)) {
+        porNivel.set(z.zona, z);
+      }
+    }
+
+    // Devolvemos en el orden fijo I -> II -> III -> IV.
+    return ZONAS_BASE
+      .map((nivel) => porNivel.get(nivel))
+      .filter((z): z is Zona => !!z)
+      .map((z) => this.toResponseDto(z));
+  }
+
+  // Crea las zonas I/II/III/IV globales que aún no existan.
+  private async ensureZonasBase(): Promise<void> {
+    const existentes = await this.zonaRepository.find();
     const zonasPresentes = new Set(existentes.map((z) => z.zona));
     const faltantes = ZONAS_BASE.filter((z) => !zonasPresentes.has(z));
 
@@ -63,7 +54,6 @@ export class ZonasService {
       this.zonaRepository.create({
         nombre: `Zona ${z}`,
         zona: z,
-        estado,
       }),
     );
 
@@ -76,13 +66,6 @@ export class ZonasService {
       nombre: zona.nombre,
       zona: zona.zona,
       descripcion: zona.descripcion,
-      estado: zona.estado
-        ? {
-            id: zona.estado.id,
-            nombre: zona.estado.nombre,
-            clave: zona.estado.clave,
-          }
-        : undefined,
     };
   }
 }
