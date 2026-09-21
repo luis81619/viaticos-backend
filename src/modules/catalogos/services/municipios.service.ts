@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 
 import { Municipio } from '../entities/municipio.entity';
 import { Estado } from '../entities/estado.entity';
@@ -19,6 +19,8 @@ import { BatchUpdateMunicipiosDto } from '../dto/municipio/batch-update-municipi
 import { In } from 'typeorm';
 
 import { ErrorCode } from 'src/common/exceptions/error-codes';
+
+const PG_UNIQUE_VIOLATION = '23505';
 
 @Injectable()
 export class MunicipiosService {
@@ -90,6 +92,17 @@ export class MunicipiosService {
     };
   }
 
+  // Lista todos los municipios de un estado sin paginar (para la pantalla de asignación).
+  async findAllByEstado(estadoId: string): Promise<MunicipioResponseDto[]> {
+    const municipios = await this.municipioRepository.find({
+      where: { estado: { id: estadoId } },
+      relations: { estado: true, zona: true },
+      order: { nombre: 'ASC' },
+    });
+
+    return municipios.map((municipio) => this.toResponseDto(municipio));
+  }
+
   // Obtiene un municipio por ID
   async findOne(id: string): Promise<MunicipioResponseDto> {
     const municipio = await this.findMunicipioOrFail(id);
@@ -114,7 +127,7 @@ export class MunicipiosService {
       createdBy: userId,
     });
 
-    const saved = await this.municipioRepository.save(municipio);
+    const saved = await this.saveOrThrow(municipio);
 
     return this.toResponseDto(saved);
   }
@@ -124,22 +137,10 @@ export class MunicipiosService {
     id: string,
     updateMunicipioDto: UpdateMunicipioDto,
     userId: string,
-    mode?: 'assign' | 'edit',
   ): Promise<MunicipioResponseDto> {
     const municipio = await this.findMunicipioOrFail(id);
 
     const { estadoId, zonaId, ...rest } = updateMunicipioDto;
-
-
-    if (mode === 'assign' && municipio.zona) {
-      throw new ConflictException({
-        error: {
-          code: ErrorCode.DUPLICATE_RESOURCE,
-          message: 'Ya existe el municipio asignado al estado seleccionado.',
-          details: [],
-        },
-      });
-    }
 
     if (estadoId) {
       municipio.estado = await this.findEstadoOrFail(estadoId);
@@ -153,25 +154,40 @@ export class MunicipiosService {
 
     Object.assign(municipio, rest, { updatedBy: userId });
 
-    const updated = await this.municipioRepository.save(municipio);
+    const updated = await this.saveOrThrow(municipio);
 
     return this.toResponseDto(updated);
   }
 
+  // Guarda un municipio y traduce el 23505 (unique) a un 409 con mensaje claro.
+  private async saveOrThrow(municipio: Municipio): Promise<Municipio> {
+    try {
+      return await this.municipioRepository.save(municipio);
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        (error as any).code === PG_UNIQUE_VIOLATION
+      ) {
+        throw new ConflictException({
+          error: {
+            code: ErrorCode.DUPLICATE_RESOURCE,
+            message: `Ya existe el municipio "${municipio.nombre}" en el estado seleccionado.`,
+            details: [],
+          },
+        });
+      }
+      throw error;
+    }
+  }
+
   // Actualización masiva: aplica los mismos cambios a los municipios listados.
-  // - zonaId y region se aplican a cada municipio.
-  // - descripcionZona se aplica a la zona (afecta a todos los municipios que usen esa zona).
   async batchUpdate(
     dto: BatchUpdateMunicipiosDto,
     userId: string,
   ): Promise<{ actualizados: number }> {
     const { ids, changes } = dto;
 
-    if (
-      changes.zonaId === undefined &&
-      changes.region === undefined &&
-      changes.descripcionZona === undefined
-    ) {
+    if (changes.zonaId === undefined && changes.region === undefined) {
       return { actualizados: 0 };
     }
 
@@ -206,25 +222,6 @@ export class MunicipiosService {
     }
 
     await this.municipioRepository.save(municipios);
-
-    // Descripción se aplica a las zonas únicas involucradas
-    if (changes.descripcionZona !== undefined) {
-      const zonasParaActualizar = new Map<string, Zona>();
-      for (const municipio of municipios) {
-        if (municipio.zona) {
-          zonasParaActualizar.set(municipio.zona.id, municipio.zona);
-        }
-      }
-
-      for (const zona of zonasParaActualizar.values()) {
-        zona.descripcion = changes.descripcionZona;
-        zona.updatedBy = userId;
-      }
-
-      if (zonasParaActualizar.size > 0) {
-        await this.zonaRepository.save(Array.from(zonasParaActualizar.values()));
-      }
-    }
 
     return { actualizados: municipios.length };
   }
@@ -297,7 +294,6 @@ export class MunicipiosService {
             id: municipio.zona.id,
             nombre: municipio.zona.nombre,
             zona: municipio.zona.zona,
-            descripcion: municipio.zona.descripcion,
           }
         : null,
       createdAt: municipio.createdAt,

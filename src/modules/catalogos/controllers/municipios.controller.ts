@@ -45,6 +45,15 @@ export class MunicipiosController {
     return this.municipiosService.findAll(query);
   }
 
+  @Get('por-estado/:estadoId')
+  @ResponseMessage('Municipios por estado retrieved successfully.')
+  findAllByEstado(
+    @Param('estadoId', new ParseUUIDPipe())
+    estadoId: string,
+  ) {
+    return this.municipiosService.findAllByEstado(estadoId);
+  }
+
   @Get(':id')
   @ResponseMessage('Municipio retrieved successfully.')
   findOne(
@@ -61,6 +70,7 @@ export class MunicipiosController {
     @Body() createMunicipioDto: CreateMunicipioDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    
     return this.municipiosService.create(
       createMunicipioDto,
       user.id,
@@ -88,14 +98,11 @@ export class MunicipiosController {
     updateMunicipioDto: UpdateMunicipioDto,
 
     @CurrentUser() user: AuthenticatedUser,
-
-    @Query('mode') mode?: 'assign' | 'edit',
   ) {
     return this.municipiosService.update(
       id,
       updateMunicipioDto,
       user.id,
-      mode,
     );
   }
 }

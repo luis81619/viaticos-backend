@@ -13,10 +13,4 @@ export class Zona extends BaseEntity {
     length: 50,
   })
   zona: string;
-
-  @Column({
-    nullable: true,
-    length: 500,
-  })
-  descripcion?: string;
 }

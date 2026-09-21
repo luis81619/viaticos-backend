@@ -3,6 +3,7 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  Unique,
 } from 'typeorm';
 
 import { BaseEntity } from 'src/common/entities/base.entity';
@@ -13,6 +14,7 @@ import { Zona } from './zona.entity';
 @Entity({
   name: 'municipio',
 })
+@Unique('UQ_MUNICIPIO_NOMBRE_ESTADO', ['nombre', 'estado'])
 export class Municipio extends BaseEntity {
 
   @Column({

@@ -10,7 +10,6 @@ export interface RhTrabajador {
 
   numeroCuentaNomina: string | null;
   numeroSeguridadSocial: string | null;
-  numeroInfonavit: string | null;
   numeroTrabajador: number | null;
 
   rfc: string | null;
@@ -23,9 +22,6 @@ export interface RhTrabajador {
   updatedAt: string;
 
   bancoId: string | null;
-  fotoId: string | null;
-  firmaId: string | null;
-  plantelId: string | null;
 }
 
 export interface RhTrabajadoresResponse {

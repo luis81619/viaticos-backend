@@ -33,25 +33,38 @@ export class TrabajadoresService {
     const {
       page = 1,
       limit = 25,
-      search,
+      nombre,
+      rfc,
+      numeroTrabajador,
       sortBy = 'apellidoPaterno',
       sortOrder = 'ASC',
     } = query;
 
     const qb = this.trabajadorRepository.createQueryBuilder('trabajador');
 
-    if (search) {
-      const term = `%${search.trim().toUpperCase()}%`;
+    // "Nombre completo": busca en nombre, apellido paterno o materno.
+    if (nombre) {
+      const term = `%${nombre.trim().toUpperCase()}%`;
       qb.andWhere(
         `(
-          UPPER(trabajador.nombre) LIKE :term
-          OR UPPER(trabajador.apellido_paterno) LIKE :term
-          OR UPPER(trabajador.apellido_materno) LIKE :term
-          OR UPPER(trabajador.rfc) LIKE :term
-          OR CAST(trabajador.numero_trabajador AS TEXT) LIKE :term
+          UPPER(trabajador.nombre) LIKE :nombre
+          OR UPPER(trabajador.apellido_paterno) LIKE :nombre
+          OR UPPER(trabajador.apellido_materno) LIKE :nombre
         )`,
-        { term },
+        { nombre: term },
       );
+    }
+
+    if (rfc) {
+      qb.andWhere('UPPER(trabajador.rfc) LIKE :rfc', {
+        rfc: `%${rfc.trim().toUpperCase()}%`,
+      });
+    }
+
+    if (numeroTrabajador) {
+      qb.andWhere('CAST(trabajador.numero_trabajador AS TEXT) LIKE :num', {
+        num: `%${numeroTrabajador.trim()}%`,
+      });
     }
 
     qb.orderBy(`trabajador.${sortBy}`, sortOrder)
@@ -143,16 +156,12 @@ export class TrabajadoresService {
           emailInstitucional: rh.emailInstitucional,
           numeroCuentaNomina: rh.numeroCuentaNomina,
           numeroSeguridadSocial: rh.numeroSeguridadSocial,
-          numeroInfonavit: rh.numeroInfonavit,
           numeroTrabajador: rh.numeroTrabajador,
           rfc: rh.rfc,
           celular: rh.celular,
           telefono: rh.telefono,
           otroTelefono: rh.otroTelefono,
           bancoId: rh.bancoId,
-          fotoId: rh.fotoId,
-          firmaId: rh.firmaId,
-          plantelId: rh.plantelId,
         });
 
         toInsert.push(nuevo);
@@ -197,16 +206,12 @@ export class TrabajadoresService {
     local.emailInstitucional = rh.emailInstitucional;
     local.numeroCuentaNomina = rh.numeroCuentaNomina;
     local.numeroSeguridadSocial = rh.numeroSeguridadSocial;
-    local.numeroInfonavit = rh.numeroInfonavit;
     local.numeroTrabajador = rh.numeroTrabajador;
     local.rfc = rh.rfc;
     local.celular = rh.celular;
     local.telefono = rh.telefono;
     local.otroTelefono = rh.otroTelefono;
     local.bancoId = rh.bancoId;
-    local.fotoId = rh.fotoId;
-    local.firmaId = rh.firmaId;
-    local.plantelId = rh.plantelId;
   }
 
   private validateResponse(response: RhTrabajadoresResponse): void {
@@ -240,16 +245,12 @@ export class TrabajadoresService {
       emailInstitucional: t.emailInstitucional,
       numeroCuentaNomina: t.numeroCuentaNomina,
       numeroSeguridadSocial: t.numeroSeguridadSocial,
-      numeroInfonavit: t.numeroInfonavit,
       numeroTrabajador: t.numeroTrabajador,
       rfc: t.rfc,
       celular: t.celular,
       telefono: t.telefono,
       otroTelefono: t.otroTelefono,
       bancoId: t.bancoId,
-      fotoId: t.fotoId,
-      firmaId: t.firmaId,
-      plantelId: t.plantelId,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
     };

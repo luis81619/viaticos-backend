@@ -37,9 +37,6 @@ export class Trabajador {
   @Column({ name: 'numero_seguridad_social', type: 'varchar', length: 255, nullable: true })
   numeroSeguridadSocial: string | null;
 
-  @Column({ name: 'numero_infonavit', type: 'varchar', length: 255, nullable: true })
-  numeroInfonavit: string | null;
-
   @Column({ name: 'numero_trabajador', type: 'int', nullable: true })
   numeroTrabajador: number | null;
 
@@ -55,18 +52,9 @@ export class Trabajador {
   @Column({ name: 'otro_telefono', type: 'varchar', length: 255, nullable: true })
   otroTelefono: string | null;
 
-  // FKs planas (sin @ManyToOne) — apuntan a ids de tablas en Viáticos.
+  // FK plana (sin @ManyToOne) — apunta al id del banco en Viáticos.
   @Column({ name: 'banco_id', type: 'uuid', nullable: true })
   bancoId: string | null;
-
-  @Column({ name: 'foto_id', type: 'uuid', nullable: true })
-  fotoId: string | null;
-
-  @Column({ name: 'firma_id', type: 'uuid', nullable: true })
-  firmaId: string | null;
-
-  @Column({ name: 'plantel_id', type: 'uuid', nullable: true })
-  plantelId: string | null;
 
   // Audit fields (los que vienen de RH — se guardan tal cual)
   @CreateDateColumn({

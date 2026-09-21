@@ -4,6 +4,4 @@ export class ZonaResponseDto {
   nombre: string;
 
   zona: string;
-
-  descripcion?: string;
 }

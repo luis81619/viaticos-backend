@@ -65,7 +65,6 @@ export class ZonasService {
       id: zona.id,
       nombre: zona.nombre,
       zona: zona.zona,
-      descripcion: zona.descripcion,
     };
   }
 }

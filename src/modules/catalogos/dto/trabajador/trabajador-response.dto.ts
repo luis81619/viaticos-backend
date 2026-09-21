@@ -10,7 +10,6 @@ export class TrabajadorResponseDto {
 
   numeroCuentaNomina: string | null;
   numeroSeguridadSocial: string | null;
-  numeroInfonavit: string | null;
   numeroTrabajador: number | null;
 
   rfc: string | null;
@@ -20,9 +19,6 @@ export class TrabajadorResponseDto {
   otroTelefono: string | null;
 
   bancoId: string | null;
-  fotoId: string | null;
-  firmaId: string | null;
-  plantelId: string | null;
 
   createdAt: Date;
   updatedAt: Date;

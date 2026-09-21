@@ -23,11 +23,6 @@ export class BatchUpdateMunicipiosChangesDto {
   @IsString()
   @MaxLength(150)
   region?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  descripcionZona?: string;
 }
 
 export class BatchUpdateMunicipiosDto {
