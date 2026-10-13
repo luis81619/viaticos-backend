@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { CatalogosModule } from './modules/catalogos/catalogos.module';
+import { ProcesosModule } from './modules/procesos/procesos.module';
 import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { AuthModule } from './modules/auth/auth.module';
     }),
     DatabaseModule,
     CatalogosModule,
+    ProcesosModule,
     AuthModule,
   ],
 

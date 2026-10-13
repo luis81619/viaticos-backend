@@ -1,0 +1,11 @@
+import { TipoUnidad } from '../../catalogos/enums/tipo-unidad.enum';
+
+export const PUESTO_POR_DIRECCION: Partial<Record<TipoUnidad, string>> = {
+  [TipoUnidad.DIRECCION_GENERAL]: 'DIRECTOR GENERAL',
+  [TipoUnidad.DIRECCION_ACADEMICA]: 'DIRECTOR ACADÉMICO',
+  [TipoUnidad.DIRECCION_PLANEACION]: 'DIRECTOR DE PLANEACIÓN',
+  [TipoUnidad.DIRECCION_VINCULACION]: 'DIRECTOR DE VINCULACIÓN',
+  [TipoUnidad.DIRECCION_INFORMATICA]: 'DIRECTOR DE INFORMÁTICA',
+  [TipoUnidad.DIRECCION_ADMINISTRACION]: 'DIRECTOR DE ADMINISTRACIÓN',
+  [TipoUnidad.DIRECCION_CEMSAD]: 'DIRECTOR DE CEMSAD',
+};

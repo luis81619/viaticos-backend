@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Param,
+  ParseIntPipe,
   Post,
   Query,
   UseGuards,
@@ -30,6 +32,12 @@ export class TrabajadoresController {
   @ResponseMessage('Trabajadores retrieved successfully.')
   findAll(@Query() query: FindTrabajadoresQueryDto) {
     return this.trabajadoresService.findAll(query);
+  }
+
+  @Get('por-numero/:numero')
+  @ResponseMessage('Trabajador retrieved successfully.')
+  findByNumero(@Param('numero', ParseIntPipe) numero: number) {
+    return this.trabajadoresService.findByNumero(numero);
   }
 
   @Post('sincronizar')

@@ -64,12 +64,13 @@ export class RolesGuard implements CanActivate {
     );
 
     if (!hasRequiredRole) {
-        throw new ForbiddenException({
-            code: ErrorCode.INSUFFICIENT_PERMISSIONS,
-            message:
-            'You do not have the required role to perform this action.',
-            details: [],
-        });
+      throw new ForbiddenException({
+        error: {
+          code: ErrorCode.INSUFFICIENT_PERMISSIONS,
+          message: `Tu usuario no tiene el rol necesario para esta acción. Se requiere: ${requiredRoles.join(', ')}. Tus roles: ${userRoles.join(', ') || 'ninguno'}.`,
+          details: [],
+        },
+      });
     }
 
     return true;

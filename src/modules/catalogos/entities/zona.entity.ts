@@ -14,3 +14,4 @@ export class Zona extends BaseEntity {
   })
   zona: string;
 }
+   

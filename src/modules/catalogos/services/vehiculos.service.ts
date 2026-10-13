@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -17,7 +18,7 @@ import { VehiculoResponseDto } from '../dto/vehiculo/vehiculo-response.dto';
 import { ErrorCode } from 'src/common/exceptions/error-codes';
 
 
-const PG_UNIQUE_VIOLATION = '23505';
+import { PG_UNIQUE_VIOLATION } from 'src/common/exceptions/postgres-error-codes';
 
 @Injectable()
 export class VehiculosService {
@@ -127,6 +128,20 @@ export class VehiculosService {
 
 
   private async saveOrThrow(vehiculo: Vehiculo): Promise<Vehiculo> {
+    if (
+      vehiculo.kmInicial != null &&
+      vehiculo.kmFinal != null &&
+      vehiculo.kmFinal < vehiculo.kmInicial
+    ) {
+      throw new BadRequestException({
+        error: {
+          code: ErrorCode.VALIDATION_FAILED,
+          message: 'El kilometraje final no puede ser menor al inicial.',
+          details: [],
+        },
+      });
+    }
+
     try {
       return await this.vehiculoRepository.save(vehiculo);
     } catch (error) {
@@ -172,6 +187,8 @@ export class VehiculosService {
       modelo: v.modelo,
       color: v.color,
       placa: v.placa,
+      kmInicial: v.kmInicial,
+      kmFinal: v.kmFinal,
       status: v.status,
       createdAt: v.createdAt,
       updatedAt: v.updatedAt,

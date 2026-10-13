@@ -53,6 +53,18 @@ export class CreateVehiculoDto {
   @MaxLength(20)
   placa: string;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  kmInicial?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  kmFinal?: number | null;
+
   @IsBoolean()
   @IsOptional()
   status?: boolean;

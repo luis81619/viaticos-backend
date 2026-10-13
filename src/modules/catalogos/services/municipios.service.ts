@@ -20,7 +20,7 @@ import { In } from 'typeorm';
 
 import { ErrorCode } from 'src/common/exceptions/error-codes';
 
-const PG_UNIQUE_VIOLATION = '23505';
+import { PG_UNIQUE_VIOLATION } from 'src/common/exceptions/postgres-error-codes';
 
 @Injectable()
 export class MunicipiosService {

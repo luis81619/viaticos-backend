@@ -8,7 +8,7 @@ import { VehiculoClase } from '../enums/vehiculo-clase.enum';
 @Entity({ name: 'vehiculo' })
 export class Vehiculo extends BaseEntity {
 
-  @Column({
+  @Column({ 
     type: 'int',
   })
   tipo: VehiculoTipo;
@@ -43,6 +43,12 @@ export class Vehiculo extends BaseEntity {
     unique: true,
   })
   placa: string;
+
+  @Column({ type: 'int', nullable: true })
+  kmInicial: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  kmFinal: number | null;
 
   @Column({
     default: true,

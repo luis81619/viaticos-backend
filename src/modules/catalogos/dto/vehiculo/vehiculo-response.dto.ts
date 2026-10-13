@@ -18,6 +18,10 @@ export class VehiculoResponseDto {
 
   placa: string;
 
+  kmInicial: number | null;
+
+  kmFinal: number | null;
+
   status: boolean;
 
   createdAt: Date;

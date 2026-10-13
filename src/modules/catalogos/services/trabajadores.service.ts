@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
@@ -9,6 +10,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 
+import { ErrorCode } from 'src/common/exceptions/error-codes';
+
+import { Banco } from '../entities/banco.entity';
 import { Trabajador } from '../entities/trabajador.entity';
 import {
   RhTrabajador,
@@ -16,12 +20,16 @@ import {
 } from '../interfaces/rh-trabajador.interface';
 import { FindTrabajadoresQueryDto } from '../dto/trabajador/find-trabajadores-query.dto';
 import { TrabajadorResponseDto } from '../dto/trabajador/trabajador-response.dto';
+import { TrabajadorDetalleResponseDto } from '../dto/trabajador/trabajador-detalle-response.dto';
 
 @Injectable()
 export class TrabajadoresService {
   constructor(
     @InjectRepository(Trabajador)
     private readonly trabajadorRepository: Repository<Trabajador>,
+
+    @InjectRepository(Banco)
+    private readonly bancoRepository: Repository<Banco>,
 
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
@@ -42,7 +50,7 @@ export class TrabajadoresService {
 
     const qb = this.trabajadorRepository.createQueryBuilder('trabajador');
 
-    // "Nombre completo": busca en nombre, apellido paterno o materno.
+
     if (nombre) {
       const term = `%${nombre.trim().toUpperCase()}%`;
       qb.andWhere(
@@ -85,6 +93,31 @@ export class TrabajadoresService {
     };
   }
 
+
+  async findByNumero(numeroTrabajador: number): Promise<TrabajadorDetalleResponseDto> {
+    const trabajador = await this.trabajadorRepository.findOne({
+      where: { numeroTrabajador },
+    });
+
+    if (!trabajador) {
+      throw new NotFoundException({
+        error: {
+          code: ErrorCode.RESOURCE_NOT_FOUND,
+          message: `No se encontró un trabajador con el número ${numeroTrabajador}.`,
+          details: [],
+        },
+      });
+    }
+
+    const banco = trabajador.bancoId
+      ? await this.bancoRepository.findOne({ where: { id: trabajador.bancoId } })
+      : null;
+
+    return {
+      ...this.toResponseDto(trabajador),
+      banco: banco ? { id: banco.id, nombre: banco.nombre } : null,
+    };
+  }
 
   async sync(): Promise<{
     received: number;
