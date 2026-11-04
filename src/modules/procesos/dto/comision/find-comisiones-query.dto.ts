@@ -24,6 +24,10 @@ export class FindComisionesQueryDto extends BasePaginationQueryDto {
   trabajador?: string;
 
   @IsOptional()
+  @IsString()
+  destino?: string;
+
+  @IsOptional()
   @IsIn(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
 }

@@ -4,6 +4,11 @@ export class ResponsableActividadResponseDto {
   puestoAutoriza: string | null;
 }
 
+export class ConteoEstadoResponseDto {
+  estado: number;
+  total: number;
+}
+
 export class CalculoDestinoResponseDto {
   zona: string | null;
   diasComision: number;

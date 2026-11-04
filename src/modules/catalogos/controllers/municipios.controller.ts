@@ -38,7 +38,7 @@ export class MunicipiosController {
   ) {}
 
   @Get()
-  @ResponseMessage('Municipios retrieved successfully.')
+  @ResponseMessage('Municipios retrieved successfully.')  
   findAll(
     @Query() query: FindMunicipiosQueryDto,
   ) {

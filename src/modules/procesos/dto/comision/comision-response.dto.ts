@@ -1,4 +1,5 @@
 import { VehiculoTipo } from '../../../catalogos/enums/vehiculo-tipo.enum';
+import { ComisionAccion } from '../../enums/comision-accion.enum';
 import { ComisionEstado } from '../../enums/comision-estado.enum';
 
 export class ComisionDestinoResponseDto {
@@ -19,6 +20,7 @@ export class ComisionResponseDto {
   id: string;
   folio: string | null;
   estado: ComisionEstado;
+  conViaticos: boolean;
 
   trabajador: {
     id: string;
@@ -34,6 +36,7 @@ export class ComisionResponseDto {
   tipoTransporte: VehiculoTipo | null;
   vehiculo: {
     id: string;
+    clase: number;
     marca: string;
     submarca: string;
     modelo: number;
@@ -41,7 +44,7 @@ export class ComisionResponseDto {
     placa: string;
   } | null;
 
-  objetivo: string;
+  objetivo: string | null;
   conceptoOtros: string | null;
   autoriza: string | null;
   puestoAutoriza: string | null;
@@ -53,9 +56,17 @@ export class ComisionResponseDto {
 
   totalViaticos: number;
 
+  // Sólo quien envió la comisión (o el comisionado) puede cancelarla, y mientras siga Por autorizar.
+  puedeCancelar: boolean;
+
+  // Borrador: quien lo capturó puede editarlo, enviarlo o eliminarlo; faltantes = lo que impide enviarlo.
+  puedeEditar: boolean;
+  faltantes: string[];
+
   revisiones: {
     id: string;
     estado: ComisionEstado;
+    accion: ComisionAccion | null;
     observaciones: string | null;
     usuario: string;
     fecha: Date;

@@ -53,10 +53,12 @@ export class MunicipiosService {
       .leftJoinAndSelect('municipio.estado', 'estado')
       .leftJoinAndSelect('municipio.zona', 'zona');
 
+    // Sin distinguir acentos: "patzcuaro" encuentra "Pátzcuaro".
     if (nombre) {
-      qb.andWhere('LOWER(municipio.nombre) LIKE LOWER(:nombre)', {
-        nombre: `%${nombre.trim()}%`,
-      });
+      qb.andWhere(
+        `TRANSLATE(LOWER(municipio.nombre), 'áéíóúü', 'aeiouu') LIKE TRANSLATE(LOWER(:nombre), 'áéíóúü', 'aeiouu')`,
+        { nombre: `%${nombre.trim()}%` },
+      );
     }
 
     if (estadoId) {

@@ -1,6 +1,12 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
-export const ACCIONES_REVISION = ['autorizar', 'correccion', 'rechazar'] as const;
+import { ComisionAccion } from '../../enums/comision-accion.enum';
+
+export const ACCIONES_REVISION = [
+  ComisionAccion.AUTORIZAR,
+  ComisionAccion.CORRECCION,
+  ComisionAccion.RECHAZAR,
+] as const;
 
 export type AccionRevision = (typeof ACCIONES_REVISION)[number];
 

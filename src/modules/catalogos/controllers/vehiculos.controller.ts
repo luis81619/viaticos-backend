@@ -53,8 +53,10 @@ export class VehiculosController {
     return this.vehiculosService.findOne(id);
   }
 
+  // Director y trabajador sólo registran/editan vehículos particulares (desde la comisión);
+  // el servicio lo valida. Los oficiales y demás tipos los maneja el administrador.
   @Post()
-  @Roles(ViaticosRole.ADMIN)
+  @Roles(ViaticosRole.ADMIN, ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
   @ResponseMessage('Vehicle created successfully.')
   create(
     @Body() createVehiculoDto: CreateVehiculoDto,
@@ -62,12 +64,12 @@ export class VehiculosController {
   ) {
     return this.vehiculosService.create(
       createVehiculoDto,
-      user.id,
+      user,
     );
   }
 
   @Patch(':id')
-  @Roles(ViaticosRole.ADMIN)
+  @Roles(ViaticosRole.ADMIN, ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
   @ResponseMessage('Vehicle updated successfully.')
   update(
     @Param('id', new ParseUUIDPipe())
@@ -81,7 +83,7 @@ export class VehiculosController {
     return this.vehiculosService.update(
       id,
       updateVehiculoDto,
-      user.id,
+      user,
     );
   }
 

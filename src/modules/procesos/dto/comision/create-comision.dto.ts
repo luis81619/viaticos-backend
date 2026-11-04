@@ -1,8 +1,8 @@
-import { PickType } from '@nestjs/mapped-types';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNotEmpty,
@@ -15,7 +15,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { CreateVehiculoDto } from '../../../catalogos/dto/vehiculo/create-vehiculo.dto';
 import { VehiculoTipo } from '../../../catalogos/enums/vehiculo-tipo.enum';
 
 export const TIPOS_TRANSPORTE = [
@@ -24,20 +23,6 @@ export const TIPOS_TRANSPORTE = [
   VehiculoTipo.AUTOBUS,
   VehiculoTipo.OTRO,
 ];
-
-// Sin id = vehículo particular nuevo; con id = particular existente cuyos datos se actualizan.
-export class VehiculoParticularDto extends PickType(CreateVehiculoDto, [
-  'clase',
-  'marca',
-  'submarca',
-  'modelo',
-  'color',
-  'placa',
-] as const) {
-  @IsOptional()
-  @IsUUID()
-  id?: string;
-}
 
 export class CreateComisionDestinoDto {
   @IsUUID()
@@ -67,6 +52,11 @@ export class CreateComisionDto {
   @IsUUID()
   trabajadorId: string;
 
+  // Si no viene, la comisión es con viáticos.
+  @IsOptional()
+  @IsBoolean()
+  conViaticos?: boolean;
+
   @IsUUID()
   direccionId: string;
 
@@ -91,11 +81,6 @@ export class CreateComisionDto {
   @IsOptional()
   @IsUUID()
   vehiculoId?: string;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => VehiculoParticularDto)
-  vehiculoParticular?: VehiculoParticularDto;
 
   @IsOptional()
   @IsString()

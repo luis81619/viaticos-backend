@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,7 +23,7 @@ import { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.inte
 
 import { ComisionesService } from '../services/comisiones.service';
 import { CreateComisionDto } from '../dto/comision/create-comision.dto';
-import { UpdateComisionDto } from '../dto/comision/update-comision.dto';
+import { BorradorComisionDto } from '../dto/comision/borrador-comision.dto';
 import { RevisarComisionDto } from '../dto/comision/revisar-comision.dto';
 import { FindComisionesQueryDto } from '../dto/comision/find-comisiones-query.dto';
 import { CalcularDestinoQueryDto } from '../dto/comision/calcular-destino-query.dto';
@@ -36,8 +38,17 @@ export class ComisionesController {
 
   @Get()
   @ResponseMessage('Comisiones retrieved successfully.')
-  findAll(@Query() query: FindComisionesQueryDto) {
-    return this.comisionesService.findAll(query);
+  findAll(
+    @Query() query: FindComisionesQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.findAll(query, user);
+  }
+
+  @Get('conteo')
+  @ResponseMessage('Conteo retrieved successfully.')
+  conteoPorEstado(@CurrentUser() user: AuthenticatedUser) {
+    return this.comisionesService.conteoPorEstado(user);
   }
 
   @Get('calcular-destino')
@@ -56,8 +67,11 @@ export class ComisionesController {
 
   @Get(':id')
   @ResponseMessage('Comision retrieved successfully.')
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.comisionesService.findOne(id);
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.findOne(id, user);
   }
 
   @Post()
@@ -70,15 +84,46 @@ export class ComisionesController {
     return this.comisionesService.create(dto, user);
   }
 
-  @Patch(':id')
-  @Roles(ViaticosRole.TRABAJADOR)
-  @ResponseMessage('Comision updated successfully.')
-  update(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateComisionDto,
+  @Post('borradores')
+  @Roles(ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
+  @ResponseMessage('Borrador created successfully.')
+  crearBorrador(
+    @Body() dto: BorradorComisionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.comisionesService.update(id, dto, user);
+    return this.comisionesService.crearBorrador(dto, user);
+  }
+
+  @Put(':id/borrador')
+  @Roles(ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
+  @ResponseMessage('Borrador saved successfully.')
+  guardarBorrador(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: BorradorComisionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.guardarBorrador(id, dto, user);
+  }
+
+  @Patch(':id/enviar')
+  @Roles(ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
+  @ResponseMessage('Comision sent successfully.')
+  enviarBorrador(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.enviarBorrador(id, user);
+  }
+
+  // Sólo borradores; una comisión enviada se cancela, no se elimina.
+  @Delete(':id')
+  @Roles(ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
+  @ResponseMessage('Borrador deleted successfully.')
+  eliminarBorrador(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.eliminarBorrador(id, user);
   }
 
   @Patch(':id/revisar')
@@ -90,5 +135,15 @@ export class ComisionesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.comisionesService.revisar(id, dto, user);
+  }
+
+  @Patch(':id/cancelar')
+  @Roles(ViaticosRole.DIRECTOR, ViaticosRole.TRABAJADOR)
+  @ResponseMessage('Comision cancelled successfully.')
+  cancelar(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.comisionesService.cancelar(id, user);
   }
 }

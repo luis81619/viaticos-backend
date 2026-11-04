@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,7 +9,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 
+import { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
+import { ViaticosRole } from '../../auth/enums/viaticos-role.enum';
+
 import { Vehiculo } from '../entities/vehiculo.entity';
+import { VehiculoTipo } from '../enums/vehiculo-tipo.enum';
 
 import { CreateVehiculoDto } from '../dto/vehiculo/create-vehiculo.dto';
 import { UpdateVehiculoDto } from '../dto/vehiculo/update-vehiculo.dto';
@@ -92,11 +97,13 @@ export class VehiculosService {
 
   async create(
     dto: CreateVehiculoDto,
-    userId: string,
+    user: AuthenticatedUser,
   ): Promise<VehiculoResponseDto> {
+    this.validarSoloParticular(user, dto.tipo);
+
     const vehiculo = this.vehiculoRepository.create({
       ...dto,
-      createdBy: userId,
+      createdBy: user.id,
     });
 
     const saved = await this.saveOrThrow(vehiculo);
@@ -106,14 +113,33 @@ export class VehiculosService {
   async update(
     id: string,
     dto: UpdateVehiculoDto,
-    userId: string,
+    user: AuthenticatedUser,
   ): Promise<VehiculoResponseDto> {
     const vehiculo = await this.findVehiculoOrFail(id);
 
-    Object.assign(vehiculo, dto, { updatedBy: userId });
+    // Ni el vehículo que se edita ni el tipo al que se cambia pueden ser otro que particular.
+    this.validarSoloParticular(user, vehiculo.tipo);
+    this.validarSoloParticular(user, dto.tipo);
+
+    Object.assign(vehiculo, dto, { updatedBy: user.id });
 
     const saved = await this.saveOrThrow(vehiculo);
     return this.toResponseDto(saved);
+  }
+
+  // Quien no es administrador sólo puede registrar o editar vehículos particulares.
+  private validarSoloParticular(user: AuthenticatedUser, tipo: VehiculoTipo | undefined): void {
+    const esAdmin = (user.rolesViaticos ?? []).includes(ViaticosRole.ADMIN);
+
+    if (!esAdmin && tipo !== undefined && tipo !== VehiculoTipo.PARTICULAR) {
+      throw new ForbiddenException({
+        error: {
+          code: ErrorCode.FORBIDDEN,
+          message: 'Solo puedes registrar o editar vehículos particulares.',
+          details: [],
+        },
+      });
+    }
   }
 
   async toggleStatus(id: string, userId: string): Promise<VehiculoResponseDto> {

@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -13,12 +12,11 @@ import {
   FindOptionsWhere,
   In,
   ObjectLiteral,
-  QueryFailedError,
   Repository,
+  SelectQueryBuilder,
 } from 'typeorm';
 
 import { ErrorCode } from 'src/common/exceptions/error-codes';
-import { PG_UNIQUE_VIOLATION } from 'src/common/exceptions/postgres-error-codes';
 import { AuthenticatedUser } from '../../auth/interfaces/authenticated-user.interface';
 import { ViaticosRole } from '../../auth/enums/viaticos-role.enum';
 
@@ -37,13 +35,13 @@ import { SIGLAS_POR_DIRECCION } from '../constants/siglas-direccion.constant';
 import { Comision } from '../entities/comision.entity';
 import { ComisionDestino } from '../entities/comision-destino.entity';
 import { ComisionRevision } from '../entities/comision-revision.entity';
+import { ACCION_POR_ESTADO_ANTERIOR, ComisionAccion } from '../enums/comision-accion.enum';
 import { ComisionEstado } from '../enums/comision-estado.enum';
 import {
   CreateComisionDestinoDto,
   CreateComisionDto,
-  VehiculoParticularDto,
 } from '../dto/comision/create-comision.dto';
-import { UpdateComisionDto } from '../dto/comision/update-comision.dto';
+import { BorradorComisionDto } from '../dto/comision/borrador-comision.dto';
 import { FindComisionesQueryDto } from '../dto/comision/find-comisiones-query.dto';
 import { CalcularDestinoQueryDto } from '../dto/comision/calcular-destino-query.dto';
 import { AccionRevision, RevisarComisionDto } from '../dto/comision/revisar-comision.dto';
@@ -54,15 +52,19 @@ import {
 import {
   ResponsableActividadResponseDto,
   CalculoDestinoResponseDto,
+  ConteoEstadoResponseDto,
 } from '../dto/comision/consultas-response.dto';
 
 const MS_POR_DIA = 86_400_000;
 
+// Quien la envió puede editarla mientras es borrador o cuando el director la devuelve a corrección.
+const ESTADOS_EDITABLES = [ComisionEstado.BORRADOR, ComisionEstado.CORRECCION];
+
 // "Rechazar" no tiene un estado propio en la lista; por ahora la comisión queda Cancelada.
 const ESTADO_POR_ACCION: Record<AccionRevision, ComisionEstado> = {
-  autorizar: ComisionEstado.AUTORIZADA,
-  correccion: ComisionEstado.CORRECCION,
-  rechazar: ComisionEstado.CANCELADA,
+  [ComisionAccion.AUTORIZAR]: ComisionEstado.AUTORIZADA,
+  [ComisionAccion.CORRECCION]: ComisionEstado.CORRECCION,
+  [ComisionAccion.RECHAZAR]: ComisionEstado.CANCELADA,
 };
 
 interface Responsable {
@@ -80,7 +82,7 @@ export class ComisionesService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async findAll(query: FindComisionesQueryDto) {
+  async findAll(query: FindComisionesQueryDto, user: AuthenticatedUser) {
     const {
       page = 1,
       limit = 25,
@@ -88,6 +90,7 @@ export class ComisionesService {
       estado,
       direccionId,
       trabajador,
+      destino,
       sortOrder = 'DESC',
     } = query;
 
@@ -95,6 +98,8 @@ export class ComisionesService {
       .leftJoinAndSelect('comision.destinos', 'destino')
       .leftJoinAndSelect('destino.municipio', 'destinoMunicipio')
       .andWhere('comision.deletedAt IS NULL');
+
+    this.aplicarAlcance(qb, user);
 
     // Por número de trabajador o por nombre / apellidos.
     if (trabajador) {
@@ -114,6 +119,21 @@ export class ComisionesService {
       });
     }
 
+    // Con EXISTS la comisión sigue trayendo todos sus destinos, no sólo el que coincide.
+    if (destino) {
+      const conDestino = qb
+        .subQuery()
+        .select('1')
+        .from(ComisionDestino, 'filtroDestino')
+        .innerJoin('filtroDestino.municipio', 'filtroMunicipio')
+        .where('filtroDestino.comisionId = comision.id')
+        .andWhere('filtroDestino.deletedAt IS NULL')
+        .andWhere('UPPER(filtroMunicipio.nombre) LIKE :destino')
+        .getQuery();
+
+      qb.andWhere(`EXISTS ${conDestino}`, { destino: `%${destino.trim().toUpperCase()}%` });
+    }
+
     if (estado !== undefined) {
       qb.andWhere('comision.estado = :estado', { estado });
     }
@@ -129,7 +149,7 @@ export class ComisionesService {
     const [comisiones, totalRecords] = await qb.getManyAndCount();
 
     return {
-      data: comisiones.map((c) => this.toResponseDto(c)),
+      data: comisiones.map((c) => this.toResponseDto(c, user)),
       meta: {
         page,
         limit,
@@ -139,8 +159,30 @@ export class ComisionesService {
     };
   }
 
-  async findOne(id: string): Promise<ComisionResponseDto> {
-    const comision = await this.baseQuery()
+  findOne(id: string, user: AuthenticatedUser): Promise<ComisionResponseDto> {
+    return this.detalle(id, user);
+  }
+
+  async conteoPorEstado(user: AuthenticatedUser): Promise<ConteoEstadoResponseDto[]> {
+    const qb = this.comisionRepository
+      .createQueryBuilder('comision')
+      .withDeleted()
+      .leftJoin('comision.trabajador', 'trabajador')
+      .select('comision.estado', 'estado')
+      .addSelect('COUNT(comision.id)', 'total')
+      .where('comision.deletedAt IS NULL')
+      .groupBy('comision.estado');
+
+    this.aplicarAlcance(qb, user);
+
+    const filas = await qb.getRawMany<{ estado: number; total: string }>();
+    return filas.map((f) => ({ estado: Number(f.estado), total: Number(f.total) }));
+  }
+
+  // Con usuario, sólo devuelve la comisión si ese usuario puede verla.
+  // Sin usuario es para uso interno (la respuesta después de crear, editar o revisar).
+  private async detalle(id: string, alcance?: AuthenticatedUser): Promise<ComisionResponseDto> {
+    const qb = this.baseQuery()
       .leftJoinAndSelect('comision.municipioOrigen', 'municipioOrigen')
       .leftJoinAndSelect('municipioOrigen.estado', 'estadoOrigen')
       .leftJoinAndSelect('comision.vehiculo', 'vehiculo')
@@ -148,18 +190,23 @@ export class ComisionesService {
       .leftJoinAndSelect('destino.municipio', 'destinoMunicipio')
       .leftJoinAndSelect('destinoMunicipio.estado', 'destinoEstado')
       .leftJoinAndSelect('destino.nivelAplicacion', 'destinoNivel')
+      .leftJoinAndSelect('comision.revisiones', 'revision')
       .where('comision.id = :id', { id })
       .andWhere('comision.deletedAt IS NULL')
-      .leftJoinAndSelect('comision.revisiones', 'revision')
       .orderBy('destino.fechaDesde', 'ASC')
-      .addOrderBy('revision.createdAt', 'ASC')
-      .getOne();
+      .addOrderBy('revision.createdAt', 'ASC');
+
+    if (alcance) {
+      this.aplicarAlcance(qb, alcance);
+    }
+
+    const comision = await qb.getOne();
 
     if (!comision) {
       throw this.notFound('Comisión no encontrada.');
     }
 
-    return this.toResponseDto(comision);
+    return this.toResponseDto(comision, alcance);
   }
 
   async obtenerResponsable(actividadId: string): Promise<ResponsableActividadResponseDto> {
@@ -195,150 +242,122 @@ export class ComisionesService {
     };
   }
 
+  // Envío directo desde el wizard (sin pasar por borrador): se exige la comisión completa.
   async create(
     dto: CreateComisionDto,
     user: AuthenticatedUser,
   ): Promise<ComisionResponseDto> {
     const id = await this.dataSource.transaction(async (manager) => {
-      const trabajador = await this.findOrFail(manager, Trabajador, dto.trabajadorId, 'Trabajador no encontrado.');
-
-      if (!this.puedeGestionarOtros(user) && !this.esElMismoTrabajador(trabajador, user)) {
-        throw this.forbidden('Solo puedes crear comisiones para ti mismo.');
-      }
-
-      const direccion = await this.findOrFail(manager, Plantel, dto.direccionId, 'Dirección no encontrada.');
-      this.validarEsDireccion(direccion);
-
-      const actividad = await this.findOrFail(manager, Actividad, dto.actividadId, 'Actividad no encontrada.');
-      this.validarActividadDeDireccion(actividad, direccion);
-      const responsable = await this.responsableDe(manager, actividad);
-
-      const nivelAplicacionId = dto.nivelAplicacionId ?? dto.destinos[0].nivelAplicacionId;
-      await this.findOrFail(manager, NivelAplicacion, nivelAplicacionId, 'Nivel de aplicación no encontrado.');
-      await this.findOrFail(manager, Municipio, dto.municipioOrigenId, 'Municipio de origen no encontrado.');
-
-      const vehiculoId = await this.resolverVehiculo(manager, dto.tipoTransporte, dto, user.id);
-
-      const destinos = await this.crearDestinos(manager, dto.destinos, user.id);
-
       const comision = manager.create(Comision, {
-        trabajadorId: dto.trabajadorId,
-        direccionId: dto.direccionId,
-        actividadId: dto.actividadId,
-        nivelAplicacionId,
-        municipioOrigenId: dto.municipioOrigenId,
-        tipoTransporte: dto.tipoTransporte,
-        vehiculoId,
-        objetivo: dto.objetivo.trim(),
-        conceptoOtros: dto.conceptoOtros?.trim() || null,
-        autoriza: dto.autoriza?.trim() || responsable.autoriza,
-        puestoAutoriza: dto.puestoAutoriza?.trim() || responsable.puestoAutoriza,
+        estado: ComisionEstado.POR_AUTORIZAR,
         createdBy: user.id,
-        destinos,
       });
+
+      await this.asignarDatos(manager, comision, dto, user);
+      this.validarCompleta(comision);
 
       const saved = await manager.save(comision);
 
       await manager.save(
-        this.crearRevision(manager, saved.id, ComisionEstado.ENVIADA, null, user),
+        this.crearRevision(manager, saved.id, ComisionEstado.POR_AUTORIZAR, ComisionAccion.ENVIAR, null, user),
       );
 
       return saved.id;
     });
 
-    return this.findOne(id);
+    return this.detalle(id);
   }
 
-  async update(
+  async crearBorrador(
+    dto: BorradorComisionDto,
+    user: AuthenticatedUser,
+  ): Promise<ComisionResponseDto> {
+    const id = await this.dataSource.transaction(async (manager) => {
+      const comision = manager.create(Comision, {
+        estado: ComisionEstado.BORRADOR,
+        createdBy: user.id,
+      });
+
+      await this.asignarDatos(manager, comision, dto, user);
+      const saved = await manager.save(comision);
+
+      await manager.save(
+        this.crearRevision(manager, saved.id, ComisionEstado.BORRADOR, ComisionAccion.BORRADOR, null, user),
+      );
+
+      return saved.id;
+    });
+
+    return this.detalle(id);
+  }
+
+  // Reemplaza todo lo capturado (destinos incluidos) de un borrador o de una comisión en corrección,
+  // sin cambiar su estado.
+  async guardarBorrador(
     id: string,
-    dto: UpdateComisionDto,
+    dto: BorradorComisionDto,
     user: AuthenticatedUser,
   ): Promise<ComisionResponseDto> {
     await this.dataSource.transaction(async (manager) => {
-      const comision = await manager.findOne(Comision, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
+      const comision = await this.comisionEditable(manager, id, user);
 
-      if (!comision) {
-        throw this.notFound('Comisión no encontrada.');
-      }
-
-      const trabajador = await manager.findOne(Trabajador, {
-        where: { id: comision.trabajadorId },
-        withDeleted: true,
-      });
-
-      if (!trabajador || !this.esElMismoTrabajador(trabajador, user)) {
-        throw this.forbidden('Solo puedes editar tus propias comisiones.');
-      }
-
-      if (comision.estado !== ComisionEstado.ENVIADA) {
-        throw this.badRequest('Solo se pueden editar comisiones que aún no han sido aprobadas.');
-      }
-
-      if (dto.direccionId !== undefined || dto.actividadId !== undefined) {
-        const direccion = await this.findOrFail(
-          manager, Plantel, dto.direccionId ?? comision.direccionId, 'Dirección no encontrada.',
-        );
-        this.validarEsDireccion(direccion);
-
-        const actividad = await this.findOrFail(
-          manager, Actividad, dto.actividadId ?? comision.actividadId, 'Actividad no encontrada.',
-        );
-        this.validarActividadDeDireccion(actividad, direccion);
-
-        if (dto.actividadId !== undefined) {
-          const responsable = await this.responsableDe(manager, actividad);
-          comision.autoriza = responsable.autoriza;
-          comision.puestoAutoriza = responsable.puestoAutoriza;
-        }
-
-        comision.direccionId = direccion.id;
-        comision.actividadId = actividad.id;
-      }
-
-      if (dto.nivelAplicacionId !== undefined) {
-        await this.findOrFail(manager, NivelAplicacion, dto.nivelAplicacionId, 'Nivel de aplicación no encontrado.');
-        comision.nivelAplicacionId = dto.nivelAplicacionId;
-      }
-
-      if (dto.municipioOrigenId !== undefined) {
-        await this.findOrFail(manager, Municipio, dto.municipioOrigenId, 'Municipio de origen no encontrado.');
-        comision.municipioOrigenId = dto.municipioOrigenId;
-      }
-
-      if (
-        dto.tipoTransporte !== undefined ||
-        dto.vehiculoId !== undefined ||
-        dto.vehiculoParticular !== undefined
-      ) {
-        const tipo = dto.tipoTransporte ?? comision.tipoTransporte;
-        if (tipo == null) {
-          throw this.badRequest('Selecciona el tipo de transporte.');
-        }
-
-        comision.vehiculoId = await this.resolverVehiculo(manager, tipo, dto, user.id);
-        comision.tipoTransporte = tipo;
-      }
-
-      if (dto.objetivo !== undefined) comision.objetivo = dto.objetivo.trim();
-      if (dto.conceptoOtros !== undefined) comision.conceptoOtros = dto.conceptoOtros.trim() || null;
-      if (dto.autoriza !== undefined) comision.autoriza = dto.autoriza.trim() || null;
-      if (dto.puestoAutoriza !== undefined) comision.puestoAutoriza = dto.puestoAutoriza.trim() || null;
+      await manager.delete(ComisionDestino, { comisionId: id });
+      await this.asignarDatos(manager, comision, dto, user);
 
       comision.updatedBy = user.id;
       await manager.save(comision);
-
-      if (dto.destinos !== undefined) {
-        const nuevos = await this.crearDestinos(manager, dto.destinos, user.id);
-        await manager.delete(ComisionDestino, { comisionId: id });
-        nuevos.forEach((d) => (d.comisionId = id));
-        await manager.save(nuevos);
-      }
     });
 
-    return this.findOne(id);
+    return this.detalle(id);
+  }
+
+  // Borrador: se envía por primera vez. Corrección: se reenvía al director ya corregida.
+  async enviarBorrador(id: string, user: AuthenticatedUser): Promise<ComisionResponseDto> {
+    await this.dataSource.transaction(async (manager) => {
+      const comision = await this.comisionEditable(manager, id, user);
+      comision.destinos = await manager.find(ComisionDestino, { where: { comisionId: id } });
+
+      this.validarCompleta(comision);
+
+      const esPrimerEnvio = comision.estado === ComisionEstado.BORRADOR;
+
+      // La fecha de elaboración es la del primer envío, no la de cuando se empezó a capturar.
+      if (esPrimerEnvio) {
+        comision.fechaElaboracion = this.fechaHoy();
+      }
+
+      comision.estado = ComisionEstado.POR_AUTORIZAR;
+      comision.updatedBy = user.id;
+      await manager.save(comision);
+
+      await manager.save(
+        this.crearRevision(
+          manager,
+          id,
+          comision.estado,
+          esPrimerEnvio ? ComisionAccion.ENVIAR : ComisionAccion.REENVIAR,
+          null,
+          user,
+        ),
+      );
+    });
+
+    return this.detalle(id);
+  }
+
+  async eliminarBorrador(id: string, user: AuthenticatedUser): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const comision = await this.comisionEditable(manager, id, user);
+
+      // Una comisión en corrección ya fue enviada: se corrige, no se elimina.
+      if (comision.estado !== ComisionEstado.BORRADOR) {
+        throw this.badRequest('Solo se pueden eliminar borradores.');
+      }
+
+      comision.deletedBy = user.id;
+      await manager.save(comision);
+      await manager.softDelete(Comision, { id });
+    });
   }
 
   async revisar(
@@ -363,12 +382,17 @@ export class ComisionesService {
         throw this.notFound('Comisión no encontrada.');
       }
 
-      if (comision.estado !== ComisionEstado.ENVIADA) {
-        throw this.badRequest('Solo se pueden revisar comisiones en estado Enviada.');
+      if (comision.direccionId !== user.plantelId) {
+        throw this.forbidden('Solo puedes revisar comisiones de tu dirección.');
+      }
+
+      if (comision.estado !== ComisionEstado.POR_AUTORIZAR) {
+        throw this.badRequest('Solo se pueden revisar comisiones en estado Por autorizar.');
       }
 
       if (dto.accion === 'autorizar') {
-        const direccion = await this.findOrFail(manager, Plantel, comision.direccionId, 'Dirección no encontrada.');
+        // Una comisión Por autorizar siempre está completa (se validó al enviarla).
+        const direccion = await this.findOrFail(manager, Plantel, comision.direccionId!, 'Dirección no encontrada.');
         comision.folio = await this.generarFolio(manager, this.siglasDeDireccion(direccion));
         comision.fechaAutorizacion = this.fechaHoy();
       }
@@ -377,26 +401,230 @@ export class ComisionesService {
       comision.updatedBy = user.id;
       await manager.save(comision);
 
-      await manager.save(this.crearRevision(manager, id, comision.estado, observaciones, user));
+      await manager.save(
+        this.crearRevision(manager, id, comision.estado, dto.accion, observaciones, user),
+      );
     });
 
-    return this.findOne(id);
+    return this.detalle(id);
+  }
+
+  // Quien la envió la retira antes de que la revisen: queda Cancelada, sin folio.
+  async cancelar(id: string, user: AuthenticatedUser): Promise<ComisionResponseDto> {
+    await this.dataSource.transaction(async (manager) => {
+      const comision = await this.comisionDelSolicitante(
+        manager, id, user, 'Solo quien envió la comisión puede cancelarla.',
+      );
+
+      if (comision.estado !== ComisionEstado.POR_AUTORIZAR) {
+        throw this.badRequest('Solo se pueden cancelar comisiones que siguen Por autorizar.');
+      }
+
+      comision.estado = ComisionEstado.CANCELADA;
+      comision.updatedBy = user.id;
+      await manager.save(comision);
+
+      await manager.save(
+        this.crearRevision(manager, id, comision.estado, ComisionAccion.CANCELAR, null, user),
+      );
+    });
+
+    return this.detalle(id);
+  }
+
+  // Bloquea la fila (no puede cambiar mientras el director la revisa) y verifica que sea de quien la pide.
+  // Sin joins en la consulta con candado: Postgres no permite FOR UPDATE sobre un LEFT JOIN.
+  private async comisionDelSolicitante(
+    manager: EntityManager,
+    id: string,
+    user: AuthenticatedUser,
+    mensajeSinPermiso: string,
+  ): Promise<Comision> {
+    const comision = await manager.findOne(Comision, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!comision) {
+      throw this.notFound('Comisión no encontrada.');
+    }
+
+    comision.trabajador = (await manager.findOne(Trabajador, {
+      where: { id: comision.trabajadorId },
+      withDeleted: true,
+    }))!;
+
+    if (!this.esSolicitante(comision, user)) {
+      throw this.forbidden(mensajeSinPermiso);
+    }
+
+    return comision;
+  }
+
+  // Sólo se edita un borrador o una comisión que el director devolvió a corrección.
+  private async comisionEditable(
+    manager: EntityManager,
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<Comision> {
+    const comision = await this.comisionDelSolicitante(
+      manager, id, user, 'Solo quien envió la comisión puede modificarla.',
+    );
+
+    if (!ESTADOS_EDITABLES.includes(comision.estado)) {
+      throw this.badRequest('Solo se pueden editar borradores o comisiones devueltas a corrección.');
+    }
+
+    return comision;
+  }
+
+  // Pasa lo capturado a la comisión. Lo que no venga queda vacío (un borrador puede estar incompleto);
+  // lo que sí venga se valida igual que en una comisión completa.
+  private async asignarDatos(
+    manager: EntityManager,
+    comision: Comision,
+    dto: BorradorComisionDto,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    const trabajador = await this.findOrFail(manager, Trabajador, dto.trabajadorId, 'Trabajador no encontrado.');
+
+    if (!this.puedeGestionarOtros(user) && !this.esElMismoTrabajador(trabajador, user)) {
+      throw this.forbidden('Solo puedes crear comisiones para ti mismo.');
+    }
+
+    comision.trabajadorId = trabajador.id;
+    comision.trabajador = trabajador;
+
+    const direccion = dto.direccionId
+      ? await this.findOrFail(manager, Plantel, dto.direccionId, 'Dirección no encontrada.')
+      : null;
+    if (direccion) this.validarEsDireccion(direccion);
+
+    const actividad = dto.actividadId
+      ? await this.findOrFail(manager, Actividad, dto.actividadId, 'Actividad no encontrada.')
+      : null;
+    if (actividad && direccion) this.validarActividadDeDireccion(actividad, direccion);
+
+    comision.direccionId = direccion?.id ?? null;
+    comision.actividadId = actividad?.id ?? null;
+
+    const responsable = actividad ? await this.responsableDe(manager, actividad) : null;
+    comision.autoriza = dto.autoriza?.trim() || responsable?.autoriza || null;
+    comision.puestoAutoriza = dto.puestoAutoriza?.trim() || responsable?.puestoAutoriza || null;
+
+    const nivelAplicacionId = dto.nivelAplicacionId ?? dto.destinos?.[0]?.nivelAplicacionId ?? null;
+    if (nivelAplicacionId) {
+      await this.findOrFail(manager, NivelAplicacion, nivelAplicacionId, 'Nivel de aplicación no encontrado.');
+    }
+    comision.nivelAplicacionId = nivelAplicacionId;
+
+    if (dto.municipioOrigenId) {
+      await this.findOrFail(manager, Municipio, dto.municipioOrigenId, 'Municipio de origen no encontrado.');
+    }
+    comision.municipioOrigenId = dto.municipioOrigenId ?? null;
+
+    comision.tipoTransporte = dto.tipoTransporte ?? null;
+    comision.vehiculoId =
+      dto.tipoTransporte != null && this.vehiculoCapturado(dto)
+        ? await this.resolverVehiculo(manager, dto.tipoTransporte, dto.vehiculoId)
+        : null;
+
+    comision.objetivo = dto.objetivo?.trim() || null;
+    comision.conceptoOtros = dto.conceptoOtros?.trim() || null;
+    comision.conViaticos = dto.conViaticos ?? true;
+    comision.destinos = await this.crearDestinos(
+      manager, dto.destinos ?? [], user.id, comision.conViaticos,
+    );
+  }
+
+  // Oficial y particular necesitan su vehículo; autobús u otro no llevan.
+  private vehiculoCapturado(dto: BorradorComisionDto): boolean {
+    if (dto.tipoTransporte === VehiculoTipo.OFICIAL) return !!dto.vehiculoId;
+    if (dto.tipoTransporte === VehiculoTipo.PARTICULAR) return !!dto.vehiculoId;
+    return true;
+  }
+
+  // Lo que le falta a una comisión para poder enviarse a autorización (se muestra en el borrador).
+  private faltantesParaEnviar(c: Comision): string[] {
+    const faltantes: string[] = [];
+
+    if (!c.direccionId) faltantes.push('la dirección');
+    if (!c.actividadId) faltantes.push('la actividad del POA');
+    if (!c.objetivo) faltantes.push('el objetivo');
+    if (!c.municipioOrigenId) faltantes.push('el origen');
+    if (!c.destinos?.length) faltantes.push('al menos un destino');
+
+    if (c.tipoTransporte == null) {
+      faltantes.push('el tipo de transporte');
+    } else if (
+      (c.tipoTransporte === VehiculoTipo.OFICIAL || c.tipoTransporte === VehiculoTipo.PARTICULAR) &&
+      !c.vehiculoId
+    ) {
+      faltantes.push('el vehículo');
+    }
+
+    if (!c.autoriza || !c.puestoAutoriza) faltantes.push('quién autoriza');
+
+    return faltantes;
+  }
+
+  private validarCompleta(comision: Comision): void {
+    const faltantes = this.faltantesParaEnviar(comision);
+
+    if (faltantes.length > 0) {
+      throw this.badRequest(`Falta capturar: ${faltantes.join(', ')}.`);
+    }
   }
 
   private crearRevision(
     manager: EntityManager,
     comisionId: string,
     estado: ComisionEstado,
+    accion: ComisionAccion,
     observaciones: string | null,
     user: AuthenticatedUser,
   ): ComisionRevision {
     return manager.create(ComisionRevision, {
       comisionId,
       estado,
+      accion,
       observaciones,
       usuarioNombre: user.fullName,
       createdBy: user.id,
     });
+  }
+
+  // Quién ve qué comisiones:
+  // - Director: sus propios borradores y, ya enviadas, sólo las de su dirección (aunque las haya capturado él);
+  //   su dirección es el plantel de su usuario en Global, que tiene el mismo id que en `planteles`.
+  // - Admin: sus borradores y todas las enviadas.
+  // - Trabajador: sólo las propias (las que capturó o en las que es el comisionado).
+  // Los borradores ajenos no los ve nadie: hasta que se envían sólo existen para quien los captura.
+  private aplicarAlcance(qb: SelectQueryBuilder<Comision>, user: AuthenticatedUser): void {
+    const roles = user.rolesViaticos ?? [];
+    const propia = '(comision.createdBy = :usuarioId OR trabajador.numeroTrabajador = :numeroUsuario)';
+    const enviada = 'comision.estado <> :borrador';
+
+    qb.setParameters({
+      usuarioId: user.id,
+      numeroUsuario: Number(user.numeroTrabajador) || -1,
+      borrador: ComisionEstado.BORRADOR,
+      direccionUsuario: user.plantelId ?? null,
+    });
+
+    if (roles.includes(ViaticosRole.DIRECTOR)) {
+      qb.andWhere(
+        `((NOT ${enviada} AND comision.createdBy = :usuarioId) OR (${enviada} AND comision.direccionId = :direccionUsuario))`,
+      );
+      return;
+    }
+
+    if (roles.includes(ViaticosRole.ADMIN)) {
+      qb.andWhere(`(${propia} OR ${enviada})`);
+      return;
+    }
+
+    qb.andWhere(propia);
   }
 
   private baseQuery() {
@@ -409,78 +637,40 @@ export class ComisionesService {
       .leftJoinAndSelect('comision.nivelAplicacion', 'nivelAplicacion');
   }
 
-  // Oficial: vehículo del catálogo. Particular: se registra o actualiza en el catálogo.
-  // Autobús / Otro: sólo se guarda el tipo de transporte, sin vehículo.
+  // Oficial y particular: un vehículo activo del catálogo de ese tipo (los particulares se registran
+  // y editan en el catálogo desde el wizard). Autobús / Otro: sólo se guarda el tipo de transporte.
   private async resolverVehiculo(
     manager: EntityManager,
     tipo: VehiculoTipo,
-    datos: { vehiculoId?: string; vehiculoParticular?: VehiculoParticularDto },
-    userId: string,
+    vehiculoId: string | undefined,
   ): Promise<string | null> {
-    if (tipo === VehiculoTipo.OFICIAL) {
-      if (!datos.vehiculoId) {
-        throw this.badRequest('Selecciona el vehículo oficial.');
-      }
-
-      const vehiculo = await this.findOrFail(manager, Vehiculo, datos.vehiculoId, 'Vehículo no encontrado.');
-      if (vehiculo.tipo !== VehiculoTipo.OFICIAL || !vehiculo.status) {
-        throw this.badRequest('El vehículo seleccionado no es un vehículo oficial activo.');
-      }
-
-      return vehiculo.id;
+    if (tipo !== VehiculoTipo.OFICIAL && tipo !== VehiculoTipo.PARTICULAR) {
+      return null;
     }
 
-    if (tipo === VehiculoTipo.PARTICULAR) {
-      if (!datos.vehiculoParticular) {
-        throw this.badRequest('Captura los datos del vehículo particular.');
-      }
+    const nombreTipo = tipo === VehiculoTipo.OFICIAL ? 'oficial' : 'particular';
 
-      return this.guardarVehiculoParticular(manager, datos.vehiculoParticular, userId);
+    if (!vehiculoId) {
+      throw this.badRequest(`Selecciona el vehículo ${nombreTipo}.`);
     }
 
-    return null;
+    const vehiculo = await this.findOrFail(manager, Vehiculo, vehiculoId, 'Vehículo no encontrado.');
+    if (vehiculo.tipo !== tipo || !vehiculo.status) {
+      throw this.badRequest(`El vehículo seleccionado no es un vehículo ${nombreTipo} activo.`);
+    }
+
+    return vehiculo.id;
   }
-
-  private async guardarVehiculoParticular(
-    manager: EntityManager,
-    datos: VehiculoParticularDto,
-    userId: string,
-  ): Promise<string> {
-    const { id, ...campos } = datos;
-
-    let vehiculo: Vehiculo;
-    if (id) {
-      vehiculo = await this.findOrFail(manager, Vehiculo, id, 'Vehículo no encontrado.');
-      if (vehiculo.tipo !== VehiculoTipo.PARTICULAR) {
-        throw this.badRequest('El vehículo seleccionado no es un vehículo particular.');
-      }
-      Object.assign(vehiculo, campos, { updatedBy: userId });
-    } else {
-      vehiculo = manager.create(Vehiculo, {
-        ...campos,
-        tipo: VehiculoTipo.PARTICULAR,
-        createdBy: userId,
-      });
-    }
-
-    try {
-      return (await manager.save(vehiculo)).id;
-    } catch (error) {
-      if (error instanceof QueryFailedError && (error as any).code === PG_UNIQUE_VIOLATION) {
-        throw new ConflictException({
-          error: {
-            code: ErrorCode.DUPLICATE_RESOURCE,
-            message: `Ya existe un vehículo con la placa "${vehiculo.placa}".`,
-            details: [],
-          },
-        });
-      }
-      throw error;
-    }
-  }
-
   private puedeGestionarOtros(user: AuthenticatedUser): boolean {
     return (user.rolesViaticos ?? []).includes(ViaticosRole.DIRECTOR);
+  }
+
+  // Quien capturó la comisión o el propio comisionado.
+  private esSolicitante(comision: Comision, user: AuthenticatedUser): boolean {
+    return (
+      comision.createdBy === user.id ||
+      (!!comision.trabajador && this.esElMismoTrabajador(comision.trabajador, user))
+    );
   }
 
   private esElMismoTrabajador(trabajador: Trabajador, user: AuthenticatedUser): boolean {
@@ -508,11 +698,16 @@ export class ComisionesService {
     };
   }
 
+  // Sin viáticos los destinos se registran igual (ruta, fechas, días), pero con montos en 0.
   private async crearDestinos(
     manager: EntityManager,
     destinos: CreateComisionDestinoDto[],
     userId: string,
+    conViaticos: boolean,
   ): Promise<ComisionDestino[]> {
+    // Un borrador puede no tener destinos todavía.
+    if (destinos.length === 0) return [];
+
     await this.validarNiveles(manager, destinos.map((d) => d.nivelAplicacionId));
 
     const municipios = await this.cargarMunicipios(manager, destinos.map((d) => d.municipioId));
@@ -521,9 +716,9 @@ export class ComisionesService {
 
     for (const d of destinos) {
       const diasComision = this.calcularDias(d.fechaDesde, d.fechaHasta);
-      const tarifa = await this.tarifaDe(
-        manager, d.nivelAplicacionId, municipios.get(d.municipioId)!, tarifas,
-      );
+      const tarifa = conViaticos
+        ? await this.tarifaDe(manager, d.nivelAplicacionId, municipios.get(d.municipioId)!, tarifas)
+        : null;
       const montos = this.montosDe(tarifa, diasComision);
 
       resultado.push(
@@ -535,7 +730,7 @@ export class ComisionesService {
           fechaHasta: d.fechaHasta,
           diasComision,
           ...montos,
-          otros: d.otros ?? 0,
+          otros: conViaticos ? (d.otros ?? 0) : 0,
           createdBy: userId,
         }),
       );
@@ -727,13 +922,15 @@ export class ComisionesService {
     });
   }
 
-  private toResponseDto(c: Comision): ComisionResponseDto {
+  // Sin usuario (respuestas internas) no se ofrecen acciones.
+  private toResponseDto(c: Comision, user?: AuthenticatedUser): ComisionResponseDto {
     const t = c.trabajador;
 
     return {
       id: c.id,
       folio: c.folio,
       estado: c.estado,
+      conViaticos: c.conViaticos,
       trabajador: t
         ? {
             id: t.id,
@@ -772,6 +969,7 @@ export class ComisionesService {
       vehiculo: c.vehiculo
         ? {
             id: c.vehiculo.id,
+            clase: c.vehiculo.clase,
             marca: c.vehiculo.marca,
             submarca: c.vehiculo.submarca,
             modelo: c.vehiculo.modelo,
@@ -786,16 +984,15 @@ export class ComisionesService {
       fechaElaboracion: c.fechaElaboracion,
       fechaAutorizacion: c.fechaAutorizacion,
       destinos: (c.destinos ?? []).map((d) => this.toDestinoResponseDto(d)),
-      totalViaticos: this.redondear(
-        (c.destinos ?? []).reduce(
-          (total, d) =>
-            total + Number(d.hospedaje) + Number(d.alimentos) + Number(d.peaje) + Number(d.otros),
-          0,
-        ),
-      ),
+      totalViaticos: this.totalViaticos(c.destinos ?? []),
+      puedeCancelar:
+        !!user && c.estado === ComisionEstado.POR_AUTORIZAR && this.esSolicitante(c, user),
+      puedeEditar: !!user && ESTADOS_EDITABLES.includes(c.estado) && this.esSolicitante(c, user),
+      faltantes: ESTADOS_EDITABLES.includes(c.estado) ? this.faltantesParaEnviar(c) : [],
       revisiones: (c.revisiones ?? []).map((r) => ({
         id: r.id,
         estado: r.estado,
+        accion: r.accion ?? ACCION_POR_ESTADO_ANTERIOR[r.estado] ?? null,
         observaciones: r.observaciones,
         usuario: r.usuarioNombre,
         fecha: r.createdAt,
@@ -803,6 +1000,24 @@ export class ComisionesService {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     };
+  }
+
+  // Con varios destinos sólo se paga el último (el de fecha más reciente); los anteriores son parte
+  // de la ruta y se guardan con sus montos sólo como referencia.
+  private totalViaticos(destinos: ComisionDestino[]): number {
+    const pagado = [...destinos]
+      .sort(
+        (a, b) =>
+          String(a.fechaDesde).localeCompare(String(b.fechaDesde)) ||
+          String(a.fechaHasta).localeCompare(String(b.fechaHasta)),
+      )
+      .at(-1);
+
+    if (!pagado) return 0;
+
+    return this.redondear(
+      Number(pagado.hospedaje) + Number(pagado.alimentos) + Number(pagado.peaje) + Number(pagado.otros),
+    );
   }
 
   private toDestinoResponseDto(d: ComisionDestino): ComisionDestinoResponseDto {
